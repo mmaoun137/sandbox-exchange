@@ -1,0 +1,418 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Sandbox Exchange</title>
+<meta name="description" content="Paper trading with a $5M demo balance at live market prices.">
+<meta name="theme-color" content="#0a0e16">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Sandbox">
+<link rel="manifest" href="manifest.json">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<link rel="icon" type="image/png" href="icon-192.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap">
+<style>
+/* Layout: trading terminal. Desktop = watchlist | chart + blotter | book + ticket. Phone = one panel at a time with bottom tabs. Deliberately dark-only. */
+:root{
+  --bg:#0a0e16; --panel:#10161f; --panel2:#151c28; --line:#1f2835; --line2:#2a3545;
+  --fg:#e4e8ef; --muted:#8792a5; --faint:#5b6577;
+  --up:#1fbf87; --down:#ef5468; --accent:#e9a23b; --accent-ink:#1a1206;
+  --up-bg:rgba(31,191,135,.12); --down-bg:rgba(239,84,104,.12); --accent-bg:rgba(233,162,59,.12);
+  --sans:"IBM Plex Sans",system-ui,-apple-system,"Segoe UI",sans-serif;
+  --mono:"JetBrains Mono",ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+  color-scheme:dark;
+}
+[hidden]{display:none!important}
+html,body{height:100%}
+body{background:var(--bg);color:var(--fg);font-family:var(--sans);font-size:13px;overflow:hidden}
+body::before{content:"";position:fixed;inset:0 0 auto;height:env(safe-area-inset-top,0px);z-index:10;background:var(--panel)}
+*{box-sizing:border-box}
+button{font:inherit;color:inherit;background:none;border:0;cursor:pointer}
+input,select{font:inherit;color:var(--fg)}
+:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
+.num{font-family:var(--mono);font-variant-numeric:tabular-nums}
+.up{color:var(--up)} .down{color:var(--down)} .muted{color:var(--muted)}
+
+.app{height:100%;display:grid;grid-template-rows:auto 1fr;}
+header.top{display:flex;align-items:center;gap:18px;padding-block:8px;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));background:var(--panel);border-bottom:1px solid var(--line);min-width:0;flex-wrap:wrap}
+.brand{display:flex;align-items:center;gap:8px;font-weight:700;letter-spacing:.01em}
+.brand .mark{width:22px;height:22px;border-radius:5px;background:var(--accent);display:grid;place-items:center;color:var(--accent-ink);font-family:var(--mono);font-size:12px;font-weight:700}
+.badge{font-size:10px;letter-spacing:.08em;text-transform:uppercase;padding:2px 6px;border-radius:3px;background:var(--accent-bg);color:var(--accent);font-weight:600}
+.hstat{display:flex;flex-direction:column;line-height:1.15}
+.hstat label{font-size:10px;letter-spacing:.07em;text-transform:uppercase;color:var(--muted)}
+.hstat b{font-family:var(--mono);font-weight:600;font-size:14px}
+.hstats{display:flex;gap:18px;margin-left:auto;align-items:center;flex-wrap:wrap}
+.seg{display:inline-flex;background:var(--bg);border:1px solid var(--line);border-radius:6px;padding:2px}
+.seg button{padding:3px 8px;border-radius:4px;color:var(--muted);font-size:12px;font-family:var(--mono)}
+.seg button.on{background:var(--panel2);color:var(--fg)}
+.ghost{padding:5px 10px;border:1px solid var(--line2);border-radius:6px;color:var(--muted);font-size:12px}
+.ghost:hover{color:var(--fg);border-color:var(--muted)}
+
+.main{display:grid;grid-template-columns:270px minmax(0,1fr) 320px;min-height:0;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px))}
+.col:first-child{border-left:1px solid var(--line)} .colR{border-right:1px solid var(--line)!important}
+.col{min-height:0;display:flex;flex-direction:column;border-right:1px solid var(--line);min-width:0}
+.col:last-child{border-right:0}
+.phead{display:flex;align-items:center;gap:8px;padding:8px 12px;border-bottom:1px solid var(--line);font-size:11px;letter-spacing:.07em;text-transform:uppercase;color:var(--muted);font-weight:600}
+
+/* watchlist */
+.wl-tools{padding:8px 10px;display:flex;flex-direction:column;gap:8px;border-bottom:1px solid var(--line)}
+.search{width:100%;background:var(--bg);border:1px solid var(--line);border-radius:6px;padding:7px 9px}
+.cls{display:flex;gap:4px;flex-wrap:wrap}
+.cls button{font-size:11px;padding:3px 8px;border-radius:12px;border:1px solid var(--line);color:var(--muted)}
+.cls button.on{border-color:var(--accent);color:var(--accent)}
+.wl{overflow:auto;flex:1}
+.wrow{display:grid;grid-template-columns:28px 1fr auto;gap:8px;align-items:center;padding:7px 12px;border-bottom:1px solid var(--line);cursor:pointer;width:100%;text-align:left}
+.wrow:hover{background:var(--panel)}
+.wrow.sel{background:var(--panel2);box-shadow:inset 2px 0 var(--accent)}
+.ico{width:26px;height:26px;border-radius:50%;display:grid;place-items:center;font-size:10px;font-weight:700;font-family:var(--mono);color:#0a0e16}
+.wsym{font-weight:600}
+.wname{font-size:11px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.wpx{text-align:right;font-family:var(--mono);font-variant-numeric:tabular-nums}
+.wpx small{display:block;font-size:11px}
+.flash-up{animation:fu .5s} .flash-down{animation:fd .5s}
+@keyframes fu{from{background:var(--up-bg)}} @keyframes fd{from{background:var(--down-bg)}}
+
+/* center */
+.center{display:grid;grid-template-rows:auto minmax(260px,1fr) minmax(180px,38%);min-height:0}
+.symbar{display:flex;align-items:center;gap:18px;padding:8px 14px;border-bottom:1px solid var(--line);flex-wrap:wrap;min-width:0}
+.symbar .big{font-size:20px;font-weight:600;font-family:var(--mono)}
+.symbar .nm{font-weight:700;font-size:15px}
+.mini{display:flex;flex-direction:column;font-size:11px;color:var(--muted)}
+.mini b{color:var(--fg);font-family:var(--mono);font-weight:500;font-size:12px}
+.chartwrap{position:relative;min-height:0;display:flex;flex-direction:column}
+.ctools{display:flex;gap:8px;padding:6px 10px;border-bottom:1px solid var(--line);align-items:center;flex-wrap:wrap}
+.chk{display:inline-flex;align-items:center;gap:5px;font-size:12px;color:var(--muted)}
+.chk i{width:10px;height:2px;display:inline-block}
+.canvasbox{position:relative;flex:1;min-height:0}
+canvas#chart{position:absolute;inset:0;width:100%;height:100%;touch-action:none;cursor:crosshair}
+.legend{position:absolute;left:10px;top:6px;font-family:var(--mono);font-size:11px;color:var(--muted);pointer-events:none;display:flex;gap:10px;flex-wrap:wrap}
+.legend b{color:var(--fg);font-weight:500}
+.hint{position:absolute;right:70px;top:6px;font-size:11px;color:var(--faint);pointer-events:none}
+
+/* blotter */
+.blotter{border-top:1px solid var(--line);display:flex;flex-direction:column;min-height:0}
+.tabs{display:flex;gap:2px;padding:0 8px;border-bottom:1px solid var(--line);overflow-x:auto}
+.tabs button{padding:9px 10px;font-size:12px;color:var(--muted);border-bottom:2px solid transparent;white-space:nowrap}
+.tabs button.on{color:var(--fg);border-bottom-color:var(--accent)}
+.tabs .cnt{font-family:var(--mono);font-size:10px;background:var(--panel2);border-radius:8px;padding:1px 5px;margin-left:4px}
+.tbody{overflow:auto;flex:1}
+.empty{padding:28px 16px;color:var(--muted);text-align:center;line-height:1.5}
+.grow{display:grid;grid-template-columns:minmax(110px,1.3fr) repeat(5,minmax(80px,1fr)) auto;gap:10px;padding:8px 12px;border-bottom:1px solid var(--line);align-items:center}
+.grow.h{font-size:10px;letter-spacing:.07em;text-transform:uppercase;color:var(--faint);position:sticky;top:0;background:var(--bg);z-index:1}
+.grow > div{min-width:0;font-family:var(--mono);font-variant-numeric:tabular-nums}
+.grow .s{font-family:var(--sans);font-weight:600}
+.pill2{display:inline-block;font-size:10px;font-weight:600;padding:1px 5px;border-radius:3px;margin-left:4px;font-family:var(--mono)}
+.pill2.long{background:var(--up-bg);color:var(--up)} .pill2.short{background:var(--down-bg);color:var(--down)}
+.pill2.n{background:var(--panel2);color:var(--muted)}
+.acts{display:flex;gap:4px;justify-content:flex-end}
+.sm{font-size:11px;padding:4px 8px;border-radius:4px;border:1px solid var(--line2);color:var(--muted);white-space:nowrap}
+.sm:hover{color:var(--fg);border-color:var(--muted)}
+.sm.x:hover{color:var(--down);border-color:var(--down)}
+.edit{grid-column:1/-1;display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.edit input{width:120px}
+
+/* right */
+.book{display:flex;flex-direction:column;min-height:0;flex:0 0 auto}
+.brow{display:grid;grid-template-columns:1fr 1fr 1fr;padding:2px 12px;font-family:var(--mono);font-size:11.5px;position:relative;font-variant-numeric:tabular-nums}
+.brow span{position:relative;z-index:1}
+.brow span:nth-child(2),.brow span:nth-child(3){text-align:right}
+.brow .bar{position:absolute;right:0;top:0;bottom:0;z-index:0}
+.brow.h{color:var(--faint);font-family:var(--sans);font-size:10px;text-transform:uppercase;letter-spacing:.07em;padding-block:6px}
+.spread{display:flex;justify-content:space-between;align-items:center;padding:6px 12px;border-block:1px solid var(--line);font-family:var(--mono)}
+.spread b{font-size:15px}
+.ticket{border-top:1px solid var(--line);padding:12px;display:flex;flex-direction:column;gap:10px;overflow:auto;flex:1;min-height:0}
+.sides{display:grid;grid-template-columns:1fr 1fr;background:var(--bg);border:1px solid var(--line);border-radius:7px;padding:3px}
+.sides button{padding:8px;border-radius:5px;font-weight:600;color:var(--muted)}
+.sides button.on.b{background:var(--up);color:#04140d}
+.sides button.on.s{background:var(--down);color:#1b0408}
+.field{display:flex;flex-direction:column;gap:4px}
+.field label{font-size:11px;color:var(--muted);display:flex;justify-content:space-between}
+.inp{display:flex;align-items:center;background:var(--bg);border:1px solid var(--line2);border-radius:6px;overflow:hidden}
+.inp:focus-within{border-color:var(--accent)}
+.inp input{flex:1;min-width:0;background:none;border:0;padding:8px 10px;font-family:var(--mono);outline:none}
+.inp .u{padding:0 10px;color:var(--muted);font-size:12px;font-family:var(--mono)}
+.inp .u button{color:var(--accent)}
+.chips{display:flex;gap:4px;flex-wrap:wrap}
+.chips button{flex:1;padding:5px 0;font-size:11.5px;border:1px solid var(--line2);border-radius:5px;color:var(--muted);font-family:var(--mono);min-width:38px}
+.chips button.on{border-color:var(--accent);color:var(--accent);background:var(--accent-bg)}
+.tog{display:flex;align-items:center;gap:8px;font-size:12px;color:var(--muted);cursor:pointer}
+.tog input{accent-color:var(--accent)}
+.two{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.summary{display:grid;grid-template-columns:auto 1fr;gap:4px 10px;font-size:12px;background:var(--panel);border:1px solid var(--line);border-radius:6px;padding:9px 10px}
+.summary dt{color:var(--muted)} .summary dd{margin:0;text-align:right;font-family:var(--mono);font-variant-numeric:tabular-nums}
+.submit{padding:11px;border-radius:7px;font-weight:700;font-size:14px}
+.submit.b{background:var(--up);color:#04140d} .submit.s{background:var(--down);color:#1b0408}
+.submit:disabled{opacity:.45;cursor:not-allowed}
+.msg{font-size:12px;min-height:16px}
+.avail{font-size:12px;color:var(--muted);display:flex;justify-content:space-between}
+
+/* portfolio */
+.pf{padding:14px;display:flex;flex-direction:column;gap:14px;overflow:auto}
+.kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:10px}
+.kpi{background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:10px 12px}
+.kpi label{font-size:10px;letter-spacing:.07em;text-transform:uppercase;color:var(--muted)}
+.kpi b{display:block;font-family:var(--mono);font-size:16px;font-weight:600;margin-top:3px}
+.eqbox{background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:10px 12px}
+.eqbox canvas{width:100%;height:140px;display:block}
+.alloc{display:flex;height:10px;border-radius:5px;overflow:hidden;background:var(--panel2)}
+.alloc i{display:block;height:100%}
+.leg{display:flex;gap:12px;flex-wrap:wrap;font-size:11px;color:var(--muted);margin-top:6px}
+.leg span::before{content:"";display:inline-block;width:8px;height:8px;border-radius:2px;background:var(--c);margin-right:5px}
+details.learn{background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:10px 12px;line-height:1.55}
+details.learn summary{cursor:pointer;font-weight:600}
+details.learn p{margin:8px 0 0;color:var(--muted);max-width:68ch}
+details.learn b{color:var(--fg)}
+
+/* modal + toasts */
+.modal{position:fixed;inset:0;background:rgba(0,0,0,.6);display:grid;place-items:center;z-index:50;padding:16px}
+.dialog{background:var(--panel);border:1px solid var(--line2);border-radius:10px;padding:18px;max-width:360px;display:flex;flex-direction:column;gap:12px}
+.dialog h3{margin:0;font-size:15px}
+.dialog p{margin:0;color:var(--muted);line-height:1.5}
+.dialog .row{display:flex;gap:8px;justify-content:flex-end}
+.btn{padding:8px 14px;border-radius:6px;font-weight:600}
+.btn.d{background:var(--down);color:#1b0408}
+.toasts{position:fixed;right:calc(16px + env(safe-area-inset-right,0px));bottom:calc(16px + env(safe-area-inset-bottom,0px));display:flex;flex-direction:column;gap:6px;z-index:40;pointer-events:none}
+.toast{background:var(--panel2);border:1px solid var(--line2);border-left:3px solid var(--accent);border-radius:6px;padding:8px 12px;font-size:12px;max-width:300px;animation:tin .25s}
+.toast.b{border-left-color:var(--up)} .toast.s{border-left-color:var(--down)}
+@keyframes tin{from{transform:translateY(8px);opacity:0}}
+
+.mnav{display:none}
+.mobile-only{display:none}
+
+/* phone / tablet */
+@media (max-width:980px){
+  body{overflow:auto}
+  .app{height:auto;min-height:100%}
+  header.top{gap:10px;position:sticky;top:env(safe-area-inset-top,0px);z-index:20}
+  .brand .txt{display:none}
+  .hstats{gap:12px;margin-left:auto}
+  .hide-m{display:none!important}
+  .main{display:block;padding-bottom:calc(64px + env(safe-area-inset-bottom,0px))}
+  .col{border:0}
+  .main > .col{display:none}
+  body[data-view="markets"] .colL{display:flex}
+  body[data-view="trade"] .colC, body[data-view="trade"] .colR{display:flex}
+  body[data-view="portfolio"] .colP{display:flex}
+  .center{display:flex;flex-direction:column}
+  .chartwrap{height:340px;flex:0 0 auto}
+  .blotter{display:none}
+  .wl{overflow:visible}
+  .book{order:2} .ticket{order:1;overflow:visible;border-top:1px solid var(--line)}
+  .colR{border-top:1px solid var(--line)}
+  .mobile-only{display:block}
+  .grow{grid-template-columns:1fr 1fr 1fr;row-gap:4px}
+  .grow.h{display:none}
+  .grow .s{grid-column:1/-1;display:flex;align-items:center;justify-content:space-between}
+  .grow .acts{grid-column:1/-1;justify-content:flex-start}
+  .grow > div[data-l]::before{content:attr(data-l);display:block;font-family:var(--sans);font-size:10px;color:var(--faint);text-transform:uppercase;letter-spacing:.06em}
+  .mnav{display:grid;grid-template-columns:repeat(3,1fr);position:fixed;left:0;right:0;bottom:0;z-index:30;background:var(--panel);border-top:1px solid var(--line);padding-bottom:env(safe-area-inset-bottom,0px);padding-left:env(safe-area-inset-left,0px);padding-right:env(safe-area-inset-right,0px)}
+  .mnav button{padding:10px 0 12px;font-size:12px;color:var(--muted);display:flex;flex-direction:column;align-items:center;gap:3px}
+  .mnav button.on{color:var(--accent)}
+  .mnav svg{width:20px;height:20px}
+  .hint{display:none}
+}
+@media (min-width:981px){ .colP{display:none} body[data-view="portfolio"] .colP{display:flex} body[data-view="portfolio"] .colC{display:none}}
+@media (prefers-reduced-motion:reduce){*{animation:none!important}}
+
+
+.dot{width:7px;height:7px;border-radius:50%;background:var(--faint);display:inline-block;flex:none}
+.feed.live .dot{background:var(--up);box-shadow:0 0 0 0 var(--up);animation:pulse 2s infinite}
+.feed.live{color:var(--fg)}
+.feed.stale .dot,.feed.connecting .dot{background:var(--accent)}
+.feed.off .dot,.feed.error .dot,.feed.needs .dot{background:var(--down)}
+@keyframes pulse{0%{box-shadow:0 0 0 0 rgba(31,191,135,.6)}70%{box-shadow:0 0 0 6px rgba(31,191,135,0)}100%{box-shadow:0 0 0 0 rgba(31,191,135,0)}}
+.banner{display:flex;align-items:center;gap:12px;flex-wrap:wrap;padding-block:10px;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));background:var(--accent-bg);border-bottom:1px solid var(--line);color:var(--fg);font-size:13px}
+.app{grid-template-rows:auto auto 1fr}
+.btn.a{background:var(--accent);color:var(--accent-ink)}
+.mstat{display:flex;align-items:center;gap:6px;font-size:11px;color:var(--muted);margin-top:2px}
+.mstat .dot.on{background:var(--up)}
+.closed{font-size:9px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:var(--faint);border:1px solid var(--line2);border-radius:3px;padding:0 4px;margin-left:3px;vertical-align:1px}
+.qgrid{display:grid;grid-template-columns:1fr 1fr;gap:1px;background:var(--line);border-bottom:1px solid var(--line)}
+.qcell{background:var(--bg);padding:8px 12px;display:flex;flex-direction:column;gap:2px;min-width:0}
+.qcell label{font-size:10px;letter-spacing:.07em;text-transform:uppercase;color:var(--faint)}
+.qcell b{font-weight:500;font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.tape{padding-bottom:6px;max-height:190px;overflow:auto}
+.tapeh{font-size:10px;letter-spacing:.07em;text-transform:uppercase;color:var(--faint);padding:8px 12px 4px}
+.trow{display:flex;justify-content:space-between;padding:2px 12px;font-family:var(--mono);font-size:11.5px;font-variant-numeric:tabular-nums}
+.cempty{position:absolute;inset:0;display:grid;place-items:center;text-align:center;color:var(--muted);padding:24px;line-height:1.6;font-size:13px}
+.cempty b{color:var(--accent)}
+@media (max-width:980px){.app{grid-template-rows:none}}
+
+html{-webkit-text-size-adjust:100%}
+body{margin:0;-webkit-tap-highlight-color:transparent;overscroll-behavior:none}
+.app{padding-top:env(safe-area-inset-top,0px)}
+.pills{display:flex;gap:6px;flex-wrap:wrap}
+.pill{display:inline-flex;align-items:center;gap:6px;font-size:11.5px;color:var(--muted);padding:4px 10px;border:1px solid var(--line);border-radius:14px;white-space:nowrap}
+.pill.live{color:var(--fg)}
+.pill.live .dot{background:var(--up);animation:pulse 2s infinite}
+.pill.connecting .dot,.pill.closed .dot{background:var(--accent)}
+.pill.down .dot,.pill.badkey .dot,.pill.nokey .dot{background:var(--down)}
+.pill.nokey,.pill.badkey{color:var(--accent);border-color:var(--accent);cursor:pointer}
+.iconbtn{width:34px;height:34px;display:grid;place-items:center;border:1px solid var(--line2);border-radius:8px;color:var(--muted)}
+.iconbtn svg{width:18px;height:18px}
+.install{display:flex;gap:12px;align-items:flex-start;padding-block:10px;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));background:var(--accent-bg);border-bottom:1px solid var(--line);font-size:13px;line-height:1.5}
+.install b{color:var(--accent)}
+.install svg{width:16px;height:16px;vertical-align:-3px}
+.install button{margin-left:auto;color:var(--muted);font-size:18px;line-height:1}
+.dialog input{width:100%;background:var(--bg);border:1px solid var(--line2);border-radius:6px;padding:9px 10px;font-family:var(--mono);color:var(--fg)}
+.dialog a{color:var(--accent)}
+.dialog ol{margin:0;padding-left:18px;color:var(--muted);line-height:1.6}
+.app{grid-template-rows:auto auto 1fr}
+@media (max-width:980px){.pills{order:3;width:100%;justify-content:center}.app{grid-template-rows:none}}
+</style>
+</head>
+<body data-view="trade">
+<div class="app">
+  <header class="top">
+    <div class="brand"><div class="mark">SX</div><span class="txt">Sandbox Exchange</span><span class="badge">Paper</span></div>
+    <div class="pills"><button class="pill connecting" id="pillC"><i class="dot"></i><span>Crypto connecting…</span></button><button class="pill" id="pillS"><i class="dot"></i><span>Stocks</span></button></div>
+    <div class="hstats">
+      <div class="hstat"><label>Equity</label><b id="hEq" class="num">$5,000,000.00</b></div>
+      <div class="hstat"><label>Total P&amp;L</label><b id="hPnl" class="num">$0.00</b></div>
+      <div class="hstat hide-m"><label>Available</label><b id="hCash" class="num">$5,000,000.00</b></div>
+      <button class="ghost hide-m" id="pfBtn">Portfolio</button>
+      <button class="iconbtn" id="setBtn" aria-label="Settings"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg></button>
+    </div>
+  </header>
+  <div class="install" id="install" hidden><span>Install as an app: tap <b>Share</b> <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3v12M8 7l4-4 4 4M5 12v8h14v-8"/></svg> then <b>Add to Home Screen</b>. It opens full screen with its own icon.</span><button id="installX" aria-label="Dismiss">×</button></div>
+
+  <div class="main" id="main">
+    <section class="col colL" aria-label="Markets">
+      <div class="phead">Markets <span style="margin-left:auto;text-transform:none;letter-spacing:0" class="num" id="clock"></span></div>
+      <div class="wl-tools">
+        <input class="search" id="q" placeholder="Search BTC, Apple, gold…" autocomplete="off">
+        <div class="cls" id="cls"></div>
+      </div>
+      <div class="wl" id="wl"></div>
+    </section>
+
+    <section class="col colC center" aria-label="Chart">
+      <div class="symbar">
+        <div><div class="nm" id="sName">BTC</div><div class="muted" style="font-size:11px" id="sFull">Bitcoin</div></div>
+        <div><div class="big" id="sPx">–</div><div id="sStat" class="mstat"></div></div>
+        <div class="mini"><span id="sChgL">24h change</span><b id="sChg">–</b></div>
+        <div class="mini"><span id="sHiL">24h high</span><b id="sHi">–</b></div>
+        <div class="mini"><span id="sLoL">24h low</span><b id="sLo">–</b></div>
+        <div class="mini"><span>Your position</span><b id="sPos">None</b></div>
+      </div>
+      <div class="chartwrap">
+        <div class="ctools">
+          <div class="seg" id="tf"></div>
+          <label class="chk"><input type="checkbox" id="ma20" checked><i style="background:var(--accent)"></i>MA 20</label>
+          <label class="chk"><input type="checkbox" id="ma50"><i style="background:#7aa7ff"></i>MA 50</label>
+          <div class="seg" style="margin-left:auto"><button id="zOut" aria-label="Zoom out">−</button><button id="zIn" aria-label="Zoom in">+</button><button id="zLive" aria-label="Jump to latest">Latest</button></div>
+        </div>
+        <div class="canvasbox">
+          <canvas id="chart"></canvas>
+          <div class="legend" id="legend"></div>
+          <div class="hint" id="hint"></div>
+          <div class="cempty" id="cempty" hidden></div>
+        </div>
+      </div>
+      <div class="blotter">
+        <div class="tabs" id="btabs">
+          <button data-v="pos" class="on">Positions<span class="cnt" id="cPos">0</span></button>
+          <button data-v="ord">Open orders<span class="cnt" id="cOrd">0</span></button>
+          <button data-v="hist">Trade history<span class="cnt" id="cHist">0</span></button>
+        </div>
+        <div class="tbody" id="blot"></div>
+      </div>
+    </section>
+
+    <section class="col colP" aria-label="Portfolio" style="flex-direction:column;min-height:0">
+      <div class="pf">
+        <div class="kpis" id="kpis"></div>
+        <div class="eqbox"><div class="phead" style="padding:0 0 8px;border:0">Equity curve</div><canvas id="eqc"></canvas></div>
+        <div class="eqbox"><div class="phead" style="padding:0 0 8px;border:0">Exposure by market</div><div class="alloc" id="alloc"></div><div class="leg" id="allocLeg"></div></div>
+        <div class="eqbox" style="padding:0">
+          <div class="tabs" id="ptabs"><button data-v="pos" class="on">Positions</button><button data-v="ord">Open orders</button><button data-v="hist">Trade history</button></div>
+          <div id="pblot"></div>
+        </div>
+        <details class="learn">
+          <summary>How trading works here</summary>
+          <p><b>Prices are live.</b> Crypto, the gold token (PAXG) and EUR stream from Binance every second, 24/7. US stocks and ETFs stream trade by trade from Finnhub while Wall Street is open (16:30–23:00 Beirut time, Mon–Fri); add your free key in ⚙ Settings.</p>
+          <p><b>Fills are real prices.</b> Crypto market orders fill at Binance's actual best ask (buy) or bid (sell). Stocks fill at the last trade plus a 0.01% spread.</p>
+          <p><b>Limit order</b> waits until price reaches your level or better. Tap the chart to set the price. <b>Stop order</b> triggers once price crosses your level, then fills at market.</p>
+          <p><b>Sell / Short</b> with no position opens a short: you profit when price falls. Selling while long closes or reduces the long.</p>
+          <p><b>Leverage</b> lets a small margin control a bigger position. At 10×, a 9% move against you liquidates the position (90% of the margin lost).</p>
+          <p><b>Stop-loss and take-profit</b> close the position automatically. Orders and stops are checked only while the app is open, like a demo account that's switched on.</p>
+          <p><b>Fees</b> are 0.10% of the traded value per fill. Your account is saved on this device.</p>
+        </details>
+      </div>
+    </section>
+
+    <section class="col colR" aria-label="Quote and order entry">
+      <div class="book">
+        <div class="phead">Quote <span class="muted num" style="margin-left:auto;text-transform:none;letter-spacing:0" id="bkSym"></span></div>
+        <div class="qgrid">
+          <div class="qcell"><label>Bid</label><b class="num down" id="qBid">–</b></div>
+          <div class="qcell"><label>Ask</label><b class="num up" id="qAsk">–</b></div>
+          <div class="qcell"><label>Spread</label><b class="num" id="qSpr">–</b></div>
+          <div class="qcell"><label>Volume</label><b class="num" id="qVol">–</b></div>
+          <div class="qcell"><label>Source</label><b id="qSrc">–</b></div>
+          <div class="qcell"><label>Last tick</label><b class="num" id="qUpd">–</b></div>
+        </div>
+        <div class="tape" id="tape"></div>
+      </div>
+      <div class="ticket" id="ticket">
+        <div class="sides"><button class="b on" data-side="buy" id="sideB">Buy / Long</button><button class="s" data-side="sell" id="sideS">Sell / Short</button></div>
+        <div class="seg" id="otype" style="align-self:flex-start"><button data-v="market" class="on">Market</button><button data-v="limit">Limit</button><button data-v="stop">Stop</button></div>
+        <div class="field" id="pxField" hidden>
+          <label for="oPx"><span id="pxLbl">Limit price</span><span>tap chart to set</span></label>
+          <div class="inp"><input id="oPx" inputmode="decimal" type="text"><span class="u">USD</span></div>
+        </div>
+        <div class="field">
+          <label for="oAmt"><span>Amount</span><span class="avail"><span>Avail&nbsp;</span><span id="avail" class="num"></span></span></label>
+          <div class="inp"><input id="oAmt" inputmode="decimal" type="text" value="10000"><span class="u"><button id="unitBtn" type="button">USD</button></span></div>
+          <div class="chips" id="pct"><button data-v="10">10%</button><button data-v="25">25%</button><button data-v="50">50%</button><button data-v="100">Max</button></div>
+        </div>
+        <div class="field">
+          <label><span>Leverage</span><span id="levMax" class="num"></span></label>
+          <div class="chips" id="lev"></div>
+        </div>
+        <label class="tog"><input type="checkbox" id="slTpOn"> Add stop-loss / take-profit</label>
+        <div class="two" id="slTp" hidden>
+          <div class="field"><label for="oSl">Stop-loss</label><div class="inp"><input id="oSl" inputmode="decimal" type="text"></div></div>
+          <div class="field"><label for="oTp">Take-profit</label><div class="inp"><input id="oTp" inputmode="decimal" type="text"></div></div>
+        </div>
+        <dl class="summary" id="sum"></dl>
+        <button class="submit b" id="submit">Buy BTC</button>
+        <div class="msg" id="msg"></div>
+      </div>
+    </section>
+  </div>
+</div>
+
+<nav class="mnav" id="mnav">
+  <button data-v="markets"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 6h16M4 12h16M4 18h10"/></svg>Markets</button>
+  <button data-v="trade" class="on"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 17l5-5 4 4 8-9"/></svg>Trade</button>
+  <button data-v="portfolio"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="7" width="18" height="13" rx="2"/><path d="M8 7V5h8v2"/></svg>Portfolio</button>
+</nav>
+<div class="toasts" id="toasts"></div>
+
+<div class="modal" id="settings" hidden>
+  <div class="dialog" role="dialog" aria-labelledby="sh" style="max-width:420px">
+    <h3 id="sh">Settings</h3>
+    <p><b style="color:var(--fg)">Live stock prices</b> come from Finnhub. It's free and takes a minute:</p>
+    <ol><li>Sign up at <a href="https://finnhub.io/register" target="_blank" rel="noopener">finnhub.io/register</a></li><li>Copy the API key shown on your dashboard</li><li>Paste it here and tap Save</li></ol>
+    <label for="fhKey" class="muted" style="font-size:12px">Finnhub API key</label>
+    <input id="fhKey" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="e.g. ct1abc…">
+    <p style="font-size:12px">The key is stored only on this device.</p>
+    <div class="msg" id="setMsg"></div>
+    <div class="row" style="justify-content:space-between"><button class="ghost" id="setReset">Reset account</button><span style="display:flex;gap:8px"><button class="ghost" id="setClose">Close</button><button class="btn a" id="setSave">Save</button></span></div>
+  </div>
+</div>
+<div class="modal" id="modal" hidden>
+  <div class="dialog" role="dialog" aria-labelledby="mh">
+    <h3 id="mh">Reset account?</h3>
+    <p>This closes every position, cancels all orders, clears your history and sets the balance back to $5,000,000.</p>
+    <div class="row"><button class="ghost" id="mNo">Cancel</button><button class="btn d" id="mYes">Reset</button></div>
+  </div>
+</div>
+<script src="app.js"></script>
+</body>
+</html>
